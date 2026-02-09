@@ -7,7 +7,7 @@ const axios = require('axios');
 const app = express();
 
 // ⚙️ CONFIGURACIÓN - CAMBIA TU API KEY AQUÍ
-const GEMINI_API_KEY = 'AIzaSyBIFQfM9Xxy2y9VqsTC3UCKiFUTkgNTOmw';
+const GEMINI_API_KEY = 'AIzaSyDheW9AhGC9FlpdrkmuipiJgqOQesB7grM';
 const PORT = process.env.PORT || 3000;
 
 // Middleware
