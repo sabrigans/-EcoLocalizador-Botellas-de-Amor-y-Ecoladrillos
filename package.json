@@ -1,0 +1,29 @@
+{
+  "name": "ecolocalizador-sharyco",
+  "version": "1.0.0",
+  "description": "Servidor para localizar puntos de entrega de Botellas de Amor y Ecoladrillos",
+  "main": "servidor-ecolocalizador.js",
+  "scripts": {
+    "start": "node servidor-ecolocalizador.js",
+    "dev": "nodemon servidor-ecolocalizador.js"
+  },
+  "keywords": [
+    "ecolocalizador",
+    "botellas-de-amor",
+    "ecoladrillos",
+    "reciclaje",
+    "sharyco"
+  ],
+  "author": "Sharyco",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
