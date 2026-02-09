@@ -1,14 +1,19 @@
 // servidor-ecolocalizador.js
-// Servidor independiente para EcoLocalizador Sharyco
-// No requiere n8n - Funciona 24/7
+// Versión con variables de entorno para Railway
 
 const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// ⚙️ CONFIGURACIÓN - CAMBIA TU API KEY AQUÍ
-const GEMINI_API_KEY = 'AIzaSyDheW9AhGC9FlpdrkmuipiJgqOQesB7grM';
+// ⚙️ CONFIGURACIÓN - Usa variable de entorno o valor por defecto
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDheW9AhGC9FlpdrkmuipiJgqOQesB7grM';
 const PORT = process.env.PORT || 3000;
+
+// Verificar que tenemos API Key
+if (GEMINI_API_KEY === 'TU_API_KEY_DE_GEMINI_AQUI') {
+  console.error('⚠️  ERROR: No se configuró GEMINI_API_KEY');
+  console.error('⚠️  Configura la variable de entorno GEMINI_API_KEY en Railway');
+}
 
 // Middleware
 app.use(express.json());
@@ -39,6 +44,9 @@ async function consultarGemini(ciudad) {
 
 Ahora busca puntos de entrega de Botellas de Amor y Ecoladrillos en: ${ciudad}`;
 
+  console.log(`🔍 Consultando Gemini para: ${ciudad}`);
+  console.log(`🔑 Usando API Key: ${GEMINI_API_KEY.substring(0, 10)}...`);
+
   try {
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
@@ -62,10 +70,23 @@ Ahora busca puntos de entrega de Botellas de Amor y Ecoladrillos en: ${ciudad}`;
       }
     );
 
+    console.log('✅ Respuesta exitosa de Gemini');
     return response.data.candidates[0].content.parts[0].text;
+    
   } catch (error) {
-    console.error('Error llamando a Gemini:', error.response?.data || error.message);
-    return 'Error al obtener resultados. Por favor intenta nuevamente más tarde.';
+    console.error('❌ Error llamando a Gemini:');
+    console.error('Status:', error.response?.status);
+    console.error('Mensaje:', error.response?.data?.error?.message || error.message);
+    console.error('Detalles completos:', JSON.stringify(error.response?.data, null, 2));
+    
+    // Mensaje de error más descriptivo para el usuario
+    if (error.response?.status === 400) {
+      return 'Error: La API Key de Gemini no es válida. Por favor contacta al administrador.';
+    } else if (error.response?.status === 429) {
+      return 'Error: Se alcanzó el límite de solicitudes. Por favor intenta más tarde.';
+    } else {
+      return 'Error al obtener resultados. Por favor intenta nuevamente más tarde.';
+    }
   }
 }
 
@@ -360,7 +381,11 @@ app.post('/', async (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'EcoLocalizador funcionando correctamente' });
+  res.json({ 
+    status: 'OK', 
+    message: 'EcoLocalizador funcionando correctamente',
+    hasApiKey: GEMINI_API_KEY !== 'TU_API_KEY_DE_GEMINI_AQUI'
+  });
 });
 
 // Iniciar servidor
@@ -370,15 +395,12 @@ app.listen(PORT, () => {
   console.log('✅  Servidor EcoLocalizador ACTIVO               ');
   console.log('✅ ================================================');
   console.log('');
-  console.log(`🌍 URL Local: http://localhost:${PORT}`);
-  console.log(`🔧 Health Check: http://localhost:${PORT}/health`);
+  console.log(`🌍 Puerto: ${PORT}`);
+  console.log(`🔑 API Key configurada: ${GEMINI_API_KEY !== 'TU_API_KEY_DE_GEMINI_AQUI' ? 'SÍ ✅' : 'NO ❌'}`);
   console.log('');
-  console.log('📝 Para usar:');
-  console.log('   1. Abre la URL en tu navegador');
-  console.log('   2. Ingresa una ciudad');
-  console.log('   3. ¡Obtén resultados al instante!');
-  console.log('');
-  console.log('⚠️  Recuerda configurar tu GEMINI_API_KEY');
+  if (GEMINI_API_KEY === 'TU_API_KEY_DE_GEMINI_AQUI') {
+    console.log('⚠️  ADVERTENCIA: Configura GEMINI_API_KEY como variable de entorno');
+  }
   console.log('');
 });
 
