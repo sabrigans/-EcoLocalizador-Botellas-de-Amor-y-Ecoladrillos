@@ -3,25 +3,16 @@ const axios = require('axios');
 const path = require('path');
 const app = express();
 
-// ⚙️ CONFIGURACIÓN
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname)); // Para que lea el logo.png que subiste
 
-// 🖼️ Servir archivos estáticos (para que lea el logo.png desde la raíz)
-app.use(express.static(__dirname));
-
-// 🤖 FUNCIÓN DE BÚSQUEDA PROFESIONAL
 async function consultarGemini(ciudad) {
-  const prompt = `Eres el localizador oficial de la empresa Sharyco. Tu misión es encontrar puntos de acopio de "Botellas de Amor" en ${ciudad}.
-  
-  REGLAS DE ORO:
-  1. Usa la herramienta de búsqueda de Google para encontrar datos ACTUALES.
-  2. Si no encuentras una dirección específica, oficial y verificada (municipio o fundación oficial), responde: "No se han encontrado puntos de acopio verificados en esta zona en este momento".
-  3. PROHIBIDO INVENTAR: No menciones colegios o clubes si no tienes la certeza de que funcionan como puntos públicos hoy.
-  4. Si hay éxito, indica: Nombre del lugar, Dirección exacta y Horarios sugeridos.`;
+  const prompt = `Eres el EcoLocalizador de Sharyco. Localiza puntos para entregar Botellas de Amor en ${ciudad}. Solo proporciona información REAL y verificable. Si no tienes información confirmada, admítelo claramente. 
+  REGLAS: No inventes direcciones. Los plásticos deben estar limpios, secos y compactados.`;
 
   try {
     const response = await axios.post(
@@ -29,80 +20,84 @@ async function consultarGemini(ciudad) {
       {
         contents: [{ parts: [{ text: prompt }] }],
         tools: [{ google_search_retrieval: {} }],
-        generationConfig: { 
-          temperature: 0.0, // Cero creatividad para evitar datos falsos
-          maxOutputTokens: 800 
-        }
-      },
-      { timeout: 15000 }
+        generationConfig: { temperature: 0.0 }
+      }
     );
-
-    const texto = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return texto || "No se pudo obtener información verificada.";
-    
+    return response.data.candidates?.[0]?.content?.parts?.[0]?.text || "No se encontró información.";
   } catch (error) {
-    console.error('Error en búsqueda:', error.message);
-    return "El servicio de búsqueda en vivo no está disponible temporalmente. Por favor, consulta los canales oficiales de la Municipalidad.";
+    // Si falla la búsqueda con internet, intentamos una búsqueda normal sin "tools" para que al menos responda algo
+    try {
+      const fallback = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        { contents: [{ parts: [{ text: prompt }] }] }
+      );
+      return fallback.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } catch (e) {
+      return "Error de conexión. Verifica tu API Key en Railway.";
+    }
   }
 }
 
-// --- DISEÑO CSS ---
-const estilos = `
-  <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #27ae60; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .card { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); width: 100%; max-width: 500px; text-align: center; }
-    .logo { max-width: 200px; height: auto; margin-bottom: 25px; }
-    h1 { color: #27ae60; font-size: 26px; margin-bottom: 20px; font-weight: 700; }
-    input { width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 12px; font-size: 16px; margin-bottom: 20px; box-sizing: border-box; }
-    button { background: #27ae60; color: white; border: none; padding: 16px; width: 100%; border-radius: 12px; font-size: 17px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-    button:hover { background: #219150; transform: translateY(-2px); }
-    .resultado-box { text-align: left; background: #f8f9fa; border-left: 5px solid #27ae60; padding: 20px; border-radius: 12px; margin: 20px 0; white-space: pre-wrap; line-height: 1.6; }
-    .legal { font-size: 11px; color: #95a5a6; border-top: 1px solid #eee; padding-top: 15px; margin-top: 20px; font-style: italic; }
-    .back-link { display: inline-block; margin-top: 20px; color: #27ae60; text-decoration: none; font-weight: bold; }
-  </style>
-`;
+// --- ESTRUCTURA VISUAL ORIGINAL ---
 
-// --- RUTAS ---
+const head = `
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoLocalizador Sharyco</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); min-height: 100vh; padding: 20px; display: flex; justify-content: center; align-items: center; }
+        .container { background: white; border-radius: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); max-width: 550px; width: 100%; padding: 45px; text-align: center; }
+        .logo { width: 120px; margin-bottom: 20px; }
+        h1 { color: #27ae60; font-size: 34px; margin-bottom: 12px; font-weight: 700; }
+        .descripcion { color: #7f8c8d; font-size: 16px; line-height: 1.6; margin-bottom: 35px; }
+        input[type="text"] { width: 100%; padding: 16px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px; margin-bottom: 20px; }
+        button { width: 100%; background: #27ae60; color: white; padding: 16px; border: none; border-radius: 12px; font-size: 17px; font-weight: 700; cursor: pointer; }
+        .resultado { text-align: left; background: #f9fafb; padding: 25px; border-radius: 15px; line-height: 1.8; white-space: pre-wrap; border: 2px solid #e8f5e9; color: #2c3e50; }
+        .footer-info { background: #fff3cd; border-left: 5px solid #ffc107; padding: 18px; border-radius: 10px; margin-top: 20px; font-size: 14px; color: #856404; text-align: left; }
+    </style>
+</head>`;
 
 app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="es">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">${estilos}</head>
+    res.send(`
+    <html>
+    ${head}
     <body>
-      <div class="card">
-        <img src="/logo.png" alt="Sharyco Logo" class="logo">
-        <h1>EcoLocalizador</h1>
-        <form method="POST">
-          <input type="text" name="ciudad" placeholder="¿Dónde quieres reciclar?" required autofocus>
-          <button type="submit">Buscar Puntos de Entrega</button>
-        </form>
-      </div>
+        <div class="container">
+            <img src="/logo.png" class="logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3299/3299935.png'">
+            <h1>EcoLocalizador Sharyco</h1>
+            <p class="descripcion">Encuentra puntos de entrega para <strong>Botellas de Amor</strong> y <strong>Ecoladrillos</strong></p>
+            <form method="POST">
+                <input type="text" name="ciudad" placeholder="Ej: Vicente Lopez, Buenos Aires" required>
+                <button type="submit">🔍 Buscar Puntos de Entrega</button>
+            </form>
+        </div>
     </body>
-    </html>
-  `);
+    </html>`);
 });
 
 app.post('/', async (req, res) => {
-  const ciudad = req.body.ciudad;
-  const respuesta = await consultarGemini(ciudad);
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="es">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">${estilos}</head>
+    const ciudad = req.body.ciudad;
+    const respuesta = await consultarGemini(ciudad);
+    res.send(`
+    <html>
+    ${head}
     <body>
-      <div class="card">
-        <img src="/logo.png" alt="Sharyco Logo" class="logo">
-        <p>Resultados para: <strong>${ciudad}</strong></p>
-        <div class="resultado-box">${respuesta}</div>
-        <div class="legal">⚠️ La información proviene de búsquedas automáticas. Sharyco recomienda confirmar con el punto antes de asistir.</div>
-        <a href="/" class="back-link">← Realizar otra búsqueda</a>
-      </div>
+        <div class="container" style="max-width: 800px;">
+            <img src="/logo.png" class="logo" style="width: 60px;">
+            <h1>EcoLocalizador Sharyco</h1>
+            <div style="background: #e8f5e9; padding: 15px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #27ae60; text-align: left;">
+                📍 <strong>Ciudad consultada:</strong> ${ciudad}
+            </div>
+            <div class="resultado">${respuesta}</div>
+            <div class="footer-info">
+                <strong>💡 ¿Conoces un punto que no aparece aquí?</strong> Repórtalo a Sharyco para agregarlo a la base de datos y ayudar a más personas.
+            </div>
+            <br><a href="/" style="color: #27ae60; font-weight: bold; text-decoration: none;">← Nueva Búsqueda</a>
+        </div>
     </body>
-    </html>
-  `);
+    </html>`);
 });
 
-app.listen(PORT, () => {
-  console.log('✅ Sharyco listo en puerto ' + PORT);
-});
+app.listen(PORT);
