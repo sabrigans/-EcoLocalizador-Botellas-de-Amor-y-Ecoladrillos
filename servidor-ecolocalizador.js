@@ -6,7 +6,7 @@ const axios = require('axios');
 const app = express();
 
 // ⚙️ CONFIGURACIÓN - Usa variable de entorno o valor por defecto
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDheW9AhGC9FlpdrkmuipiJgqOQesB7grM';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
 // Verificar que tenemos API Key
