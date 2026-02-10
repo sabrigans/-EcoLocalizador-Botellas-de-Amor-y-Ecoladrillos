@@ -1,132 +1,108 @@
 const express = require('express');
 const axios = require('axios');
+const path = require('path');
 const app = express();
 
 // ⚙️ CONFIGURACIÓN
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// 🖼️ URL DE LOGO CORREGIDA (Link Directo de Drive)
-const URL_DE_MI_LOGO = "http://googleusercontent.com/profile/picture/4";
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 🖼️ Servir archivos estáticos (para que lea el logo.png desde la raíz)
+app.use(express.static(__dirname));
+
 // 🤖 FUNCIÓN DE BÚSQUEDA PROFESIONAL
 async function consultarGemini(ciudad) {
-  // El prompt ahora es ultra estricto para evitar inventos
-  const prompt = `Eres el localizador oficial de Sharyco. Tu tarea es encontrar puntos reales para "Botellas de Amor" en ${ciudad}.
+  const prompt = `Eres el localizador oficial de la empresa Sharyco. Tu misión es encontrar puntos de acopio de "Botellas de Amor" en ${ciudad}.
   
-  REGLAS CRÍTICAS:
-  1. Usa la herramienta de búsqueda de Google.
-  2. Si NO encuentras una dirección específica y confirmada, responde exactamente: "No he podido localizar puntos de acopio verificados en esta ubicación actualmente."
-  3. No menciones lugares basados en suposiciones.
-  4. Si encuentras información, incluye: Nombre, Dirección exacta y Horario (si existe).`;
+  REGLAS DE ORO:
+  1. Usa la herramienta de búsqueda de Google para encontrar datos ACTUALES.
+  2. Si no encuentras una dirección específica, oficial y verificada (municipio o fundación oficial), responde: "No se han encontrado puntos de acopio verificados en esta zona en este momento".
+  3. PROHIBIDO INVENTAR: No menciones colegios o clubes si no tienes la certeza de que funcionan como puntos públicos hoy.
+  4. Si hay éxito, indica: Nombre del lugar, Dirección exacta y Horarios sugeridos.`;
 
   try {
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ google_search_retrieval: {} }], // Herramienta de búsqueda en vivo
+        tools: [{ google_search_retrieval: {} }],
         generationConfig: { 
-          temperature: 0.0, // Bajamos a 0 para eliminar CUALQUIER rastro de "creatividad" o invento
-          maxOutputTokens: 1000 
+          temperature: 0.0, // Cero creatividad para evitar datos falsos
+          maxOutputTokens: 800 
         }
       },
-      { timeout: 15000 } // Si tarda más de 15 seg, da error
+      { timeout: 15000 }
     );
 
     const texto = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    return texto || "No se pudo obtener información verificada.";
     
-    if (!texto || texto.length < 5) {
-      return "No se encontró información verificada para esta ciudad.";
-    }
-
-    return texto;
   } catch (error) {
-    console.error('Error en API:', error.message);
-    // Si la herramienta de Google Search falla (por falta de créditos o error técnico), 
-    // devolvemos este mensaje en lugar de dejar que la IA invente datos viejos.
-    return "Lo sentimos, el servicio de búsqueda en tiempo real no está disponible o no encontró datos precisos. Por favor, intenta de nuevo más tarde o consulta la web municipal.";
+    console.error('Error en búsqueda:', error.message);
+    return "El servicio de búsqueda en vivo no está disponible temporalmente. Por favor, consulta los canales oficiales de la Municipalidad.";
   }
 }
+
+// --- DISEÑO CSS ---
+const estilos = `
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #27ae60; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+    .card { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); width: 100%; max-width: 500px; text-align: center; }
+    .logo { max-width: 200px; height: auto; margin-bottom: 25px; }
+    h1 { color: #27ae60; font-size: 26px; margin-bottom: 20px; font-weight: 700; }
+    input { width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 12px; font-size: 16px; margin-bottom: 20px; box-sizing: border-box; }
+    button { background: #27ae60; color: white; border: none; padding: 16px; width: 100%; border-radius: 12px; font-size: 17px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+    button:hover { background: #219150; transform: translateY(-2px); }
+    .resultado-box { text-align: left; background: #f8f9fa; border-left: 5px solid #27ae60; padding: 20px; border-radius: 12px; margin: 20px 0; white-space: pre-wrap; line-height: 1.6; }
+    .legal { font-size: 11px; color: #95a5a6; border-top: 1px solid #eee; padding-top: 15px; margin-top: 20px; font-style: italic; }
+    .back-link { display: inline-block; margin-top: 20px; color: #27ae60; text-decoration: none; font-weight: bold; }
+  </style>
+`;
 
 // --- RUTAS ---
 
 app.get('/', (req, res) => {
-  res.send(htmlFormulario());
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">${estilos}</head>
+    <body>
+      <div class="card">
+        <img src="/logo.png" alt="Sharyco Logo" class="logo">
+        <h1>EcoLocalizador</h1>
+        <form method="POST">
+          <input type="text" name="ciudad" placeholder="¿Dónde quieres reciclar?" required autofocus>
+          <button type="submit">Buscar Puntos de Entrega</button>
+        </form>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 app.post('/', async (req, res) => {
   const ciudad = req.body.ciudad;
   const respuesta = await consultarGemini(ciudad);
-  res.send(htmlResultado(ciudad, respuesta));
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">${estilos}</head>
+    <body>
+      <div class="card">
+        <img src="/logo.png" alt="Sharyco Logo" class="logo">
+        <p>Resultados para: <strong>${ciudad}</strong></p>
+        <div class="resultado-box">${respuesta}</div>
+        <div class="legal">⚠️ La información proviene de búsquedas automáticas. Sharyco recomienda confirmar con el punto antes de asistir.</div>
+        <a href="/" class="back-link">← Realizar otra búsqueda</a>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
-app.listen(PORT, () => console.log(`🚀 Sharyco funcionando en puerto ${PORT}`));
-
-// --- DISEÑO ---
-
-function htmlFormulario() {
-  return `
-  <!DOCTYPE html>
-  <html lang="es">
-  <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EcoLocalizador Sharyco</title>
-    <style>
-      body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #2ecc71, #27ae60); min-height: 100vh; display: flex; justify-content: center; align-items: center; margin: 0; }
-      .container { background: white; border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); width: 90%; max-width: 450px; padding: 40px; text-align: center; }
-      .logo { width: 160px; margin-bottom: 20px; }
-      h1 { color: #27ae60; margin-bottom: 20px; }
-      input { width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 12px; margin-bottom: 20px; font-size: 16px; }
-      button { width: 100%; background: #27ae60; color: white; border: none; padding: 16px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <img src="${URL_DE_MI_LOGO}" class="logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3299/3299935.png'">
-      <h1>EcoLocalizador</h1>
-      <form method="POST">
-        <input type="text" name="ciudad" placeholder="Ingresa tu ciudad..." required autofocus>
-        <button type="submit">Buscar Puntos Verdes</button>
-      </form>
-    </div>
-  </body>
-  </html>`;
-}
-
-function htmlResultado(ciudad, respuesta) {
-  return `
-  <!DOCTYPE html>
-  <html lang="es">
-  <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resultados - Sharyco</title>
-    <style>
-      body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; }
-      .container { max-width: 650px; margin: 0 auto; background: white; padding: 40px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-      .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px; margin-bottom: 20px; }
-      .logo-small { height: 45px; }
-      .res-box { white-space: pre-wrap; line-height: 1.7; color: #333; font-size: 16px; background: #f9f9f9; padding: 20px; border-radius: 15px; }
-      .disclaimer { margin-top: 20px; padding: 15px; background: #fff3cd; color: #856404; border-radius: 10px; font-size: 13px; font-style: italic; }
-      .btn { display: block; text-align: center; margin-top: 30px; color: #27ae60; text-decoration: none; font-weight: bold; border: 2px solid #27ae60; padding: 10px; border-radius: 10px; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h2 style="color:#27ae60">Resultados</h2>
-        <img src="${URL_DE_MI_LOGO}" class="logo-small" onerror="this.style.display='none'">
-      </div>
-      <p style="margin-bottom:15px">📍 Búsqueda en: <strong>${ciudad}</strong></p>
-      <div class="res-box">${respuesta}</div>
-      <div class="disclaimer">
-        <strong>⚠️ IMPORTANTE:</strong> Información obtenida en tiempo real. Sharyco no se responsabiliza por cambios de horarios o cierres de puntos de terceros.
-      </div>
-      <a href="/" class="btn">← Nueva Búsqueda</a>
-    </div>
-  </body>
-  </html>`;
-}
+app.listen(PORT, () => {
+  console.log('✅ Sharyco listo en puerto ' + PORT);
+});
