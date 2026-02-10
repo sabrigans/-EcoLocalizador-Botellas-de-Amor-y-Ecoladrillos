@@ -2,46 +2,60 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
+// ⚙️ CONFIGURACIÓN
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname));
+// Permite que la app lea el archivo logo.png de tu carpeta principal
+app.use(express.static(__dirname)); 
 
+/**
+ * Función que conecta con Gemini 1.5 Flash usando Google Search Grounding.
+ * Está configurada con temperatura 0 para evitar información falsa.
+ */
 async function consultarGemini(ciudad) {
-  // Usamos el endpoint v1beta que es el compatible con Google Search Grounding
+  // Endpoint v1beta necesario para la función de búsqueda dinámica
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
   
   const prompt = `Actúa como el EcoLocalizador oficial de Sharyco. 
-  Busca puntos de entrega de "Botellas de Amor" en ${ciudad} usando Google Search.
+  Tu misión es encontrar puntos de acopio REALES para entregar "Botellas de Amor" en la ciudad de ${ciudad}.
   
-  IMPORTANTE: Solo reporta lugares que aparezcan en resultados de búsqueda actuales. 
-  Si no encuentras nada oficial o verificado, responde exactamente: "NO_DATOS".
-  No inventes ni supongas ubicaciones por conocimiento previo.`;
+  REGLAS ESTRICTAS:
+  1. Utiliza la búsqueda de Google en tiempo real.
+  2. Si no encuentras puntos oficiales, municipales o de la fundación confirmados, responde: "No se han localizado puntos de acopio verificados en esta zona mediante la búsqueda oficial".
+  3. No menciones lugares privados o colegios a menos que sean centros públicos de recepción.
+  4. Indica: Nombre del lugar, Dirección exacta y Horarios si figuran.`;
 
   try {
     const response = await axios.post(url, {
       contents: [{ parts: [{ text: prompt }] }],
-      // Ajustamos el nombre de la herramienta a la versión más estable
-      tools: [{ google_search: {} }], 
+      tools: [{
+        google_search_retrieval: {
+          dynamic_retrieval_config: {
+            mode: "unspecified",
+            dynamic_threshold: 0.001 // Fuerza a que casi siempre consulte en Google
+          }
+        }
+      }],
       generationConfig: { 
-        temperature: 0.0, 
+        temperature: 0.0, // Bloquea la "creatividad" e inventos
         maxOutputTokens: 1000 
       }
     });
 
     const texto = response.data.candidates[0].content.parts[0].text;
 
-    if (texto.includes("NO_DATOS") || texto.trim().length < 5) {
-      return "No se han encontrado puntos de entrega verificados en esta zona a través de la búsqueda en tiempo real.";
+    if (!texto || texto.trim().length < 5) {
+      return "No se encontró información verificada para esta ubicación.";
     }
 
     return texto;
 
   } catch (error) {
-    console.error('Detalle técnico:', error.response?.data || error.message);
-    return "ERROR DE CONEXIÓN: No se pudo validar la información con Google Search. Por favor, verifica la configuración de Vertex AI o intenta más tarde.";
+    console.error('Detalle del error en Railway:', error.response?.data || error.message);
+    return "ERROR DE CONEXIÓN: No se pudo validar la información en tiempo real. Por favor, verifica que la facturación de Google Cloud esté activa o intenta más tarde.";
   }
 }
 
@@ -49,7 +63,8 @@ async function consultarGemini(ciudad) {
 
 const head = `
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EcoLocalizador Sharyco</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; margin: 0; padding: 20px; }
@@ -95,4 +110,6 @@ app.post('/', async (req, res) => {
   </div></body></html>`);
 });
 
-app.listen(PORT);
+app.listen(PORT, () => {
+  console.log(`✅ Sharyco corriendo en puerto ${PORT}`);
+});
