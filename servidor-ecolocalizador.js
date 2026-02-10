@@ -1,68 +1,105 @@
 // servidor-ecolocalizador.js
-// Versión con variables de entorno para Railway
+// Versión mejorada con mejor manejo de errores
 
 const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// ⚙️ CONFIGURACIÓN - Usa variable de entorno o valor por defecto
+// ⚙️ CONFIGURACIÓN
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// Verificar que tenemos API Key
-if (GEMINI_API_KEY === 'TU_API_KEY_DE_GEMINI_AQUI') {
-  console.error('⚠️  ERROR: No se configuró GEMINI_API_KEY');
-  console.error('⚠️  Configura la variable de entorno GEMINI_API_KEY en Railway');
+// Verificar API Key
+if (!GEMINI_API_KEY) {
+  console.error('❌ ERROR: GEMINI_API_KEY no está configurada');
+  console.error('❌ Configura la variable de entorno en Railway');
 }
+
+// 📍 BASE DE DATOS LOCAL - AGREGA PUNTOS CONOCIDOS AQUÍ
+const puntosLocales = [
+  {
+    ciudad: 'tigre',
+    zona: 'Tigre, Buenos Aires, Argentina',
+    puntos: [
+      {
+        nombre: 'Municipalidad de Tigre - Secretaría de Ambiente',
+        direccion: 'Av. Liniers 371, Tigre Centro',
+        detalles: 'Punto de acopio municipal. Consultar horarios en: https://www.tigre.gob.ar',
+        telefono: '4512-4000'
+      },
+      {
+        nombre: 'Estación Fluvial Tigre',
+        direccion: 'Mitre 305, Tigre',
+        detalles: 'Punto verde municipal',
+        telefono: 'Consultar en municipalidad'
+      }
+    ]
+  },
+  {
+    ciudad: 'benavidez',
+    zona: 'Benavidez, Tigre, Buenos Aires',
+    puntos: [
+      {
+        nombre: 'Punto de reciclaje Tigre - Zona Norte',
+        direccion: 'Consultar ubicaciones exactas en: https://www.tigre.gob.ar/puntos-verdes',
+        detalles: 'Benavidez forma parte del partido de Tigre. Consultar puntos verdes más cercanos.',
+        telefono: '4512-4000 (Municipalidad de Tigre)'
+      }
+    ]
+  }
+];
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Función para consultar Gemini
+// Función para buscar en base de datos local
+function buscarEnBaseDatos(ciudad) {
+  const ciudadNorm = ciudad.toLowerCase().trim();
+  
+  for (const entrada of puntosLocales) {
+    if (ciudadNorm.includes(entrada.ciudad) || entrada.ciudad.includes(ciudadNorm)) {
+      console.log(`✅ Encontrado en BD local: ${entrada.ciudad}`);
+      return entrada;
+    }
+  }
+  
+  return null;
+}
+
+// Función para consultar Gemini con mejor manejo de errores
 async function consultarGemini(ciudad) {
- const prompt = `Eres el "EcoLocalizador de Sharyco", un agente especializado en localizar puntos de acopio para "Botellas de Amor" y "Ecoladrillos" en CUALQUIER localidad, barrio o municipio de Latinoamérica.
+  const prompt = `Eres el EcoLocalizador de Sharyco. Localiza puntos para entregar Botellas de Amor y Ecoladrillos en ${ciudad}.
 
-### IMPORTANTE - BÚSQUEDA HIPERLOCAL:
-- El usuario puede buscar en BARRIOS, MUNICIPIOS, LOCALIDADES o ciudades específicas
-- Ejemplos válidos: "Benavidez", "Tigre", "Vicente López", "San Isidro", "Palermo", "Recoleta"
-- NO digas que no tienes información sin ANTES buscar en tu conocimiento
-- Si el lugar es pequeño, busca puntos en la zona metropolitana más cercana
-- Prioriza puntos DENTRO del barrio/localidad solicitada
-- Si no hay en ese barrio específico, menciona los más cercanos indicando la distancia aproximada
+IMPORTANTE:
+- Busca en barrios, municipios y localidades específicas
+- Solo proporciona información REAL y verificable
+- Si no tienes información confirmada, admítelo claramente
 
-### REGLA DE ORO DE VERACIDAD:
-- PROHIBIDO INVENTAR direcciones o nombres de lugares
-- Si encuentras información REAL, compártela con dirección completa
-- Si NO encuentras información verificada, admítelo y sugiere contactar:
-  * Municipalidad local
-  * Centros de reciclaje cercanos
-  * Grupos ambientales de la zona
+FORMATO DE RESPUESTA:
+Si encuentras puntos:
+📍 Puntos en ${ciudad}:
 
-### TÉRMINOS EQUIVALENTES:
-- Botellas de Amor = Ecoladrillos = Re-botellas = Madera Plástica = Botellas rellenas de plástico
+1. [Nombre del lugar]
+   📍 Dirección: [dirección completa]
+   📞 Contacto: [si lo conoces]
+   ⏰ Horarios: [si los conoces]
 
-### ESTRUCTURA DE RESPUESTA SI ENCUENTRAS INFORMACIÓN:
-📍 Puntos de entrega en [Barrio/Localidad], [Municipio/Partido], [Provincia], [País]
+2. [Siguiente punto...]
 
-* [Nombre del Lugar]: [Dirección completa con calle y número]
-  - Horarios: [si los conoces]
-  - Contacto: [si lo conoces]
-  - Distancia desde ${ciudad}: [si es relevante]
-
-### ESTRUCTURA SI NO ENCUENTRAS:
-Lo siento, no tengo información verificada de puntos de acopio en ${ciudad}.
+Si NO encuentras:
+"No tengo información verificada de puntos de acopio en ${ciudad}.
 
 Te sugiero:
-1. Contactar la municipalidad de [municipio correspondiente]
-2. Buscar en localidades cercanas como: [mencionar 2-3 localidades cercanas]
-3. Consultar grupos de reciclaje locales en redes sociales
+• Contactar la municipalidad local
+• Buscar 'punto verde ${ciudad}' en Google Maps
+• Preguntar en grupos de reciclaje en redes sociales"
 
-### RECORDATORIO FINAL:
-"Asegúrate de que los plásticos estén limpios, secos y bien compactados antes de entregarlos."
+Recuerda: Los plásticos deben estar limpios, secos y compactados.
 
-Ahora busca puntos de entrega de Botellas de Amor y Ecoladrillos en: ${ciudad}`;
-  console.log(`🔑 Usando API Key: ${GEMINI_API_KEY.substring(0, 10)}...`);
+Responde en español de manera clara y concisa.`;
+
+  console.log(`🤖 Consultando Gemini para: ${ciudad}`);
 
   try {
     const response = await axios.post(
@@ -74,37 +111,141 @@ Ahora busca puntos de entrega de Botellas de Amor y Ecoladrillos en: ${ciudad}`;
           }]
         }],
         generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024
-        }
+          temperature: 0.4,
+          topK: 32,
+          topP: 0.8,
+          maxOutputTokens: 2048,
+          stopSequences: []
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_NONE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_NONE"
+          }
+        ]
       },
       {
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
       }
     );
 
-    console.log('✅ Respuesta exitosa de Gemini');
-    return response.data.candidates[0].content.parts[0].text;
+    if (!response.data || !response.data.candidates || response.data.candidates.length === 0) {
+      console.error('❌ Respuesta de Gemini vacía o sin candidatos');
+      return null;
+    }
+
+    const candidate = response.data.candidates[0];
+    
+    // Verificar si la respuesta fue bloqueada
+    if (candidate.finishReason === 'SAFETY') {
+      console.error('⚠️ Respuesta bloqueada por filtros de seguridad');
+      return null;
+    }
+
+    // Verificar si la respuesta está incompleta
+    if (candidate.finishReason === 'MAX_TOKENS') {
+      console.warn('⚠️ Respuesta truncada por límite de tokens');
+    }
+
+    const texto = candidate.content?.parts?.[0]?.text;
+    
+    if (!texto || texto.trim().length === 0) {
+      console.error('❌ Texto de respuesta vacío');
+      return null;
+    }
+
+    console.log(`✅ Respuesta de Gemini recibida (${texto.length} caracteres)`);
+    console.log(`📊 Finish reason: ${candidate.finishReason}`);
+    
+    return texto;
     
   } catch (error) {
-    console.error('❌ Error llamando a Gemini:');
-    console.error('Status:', error.response?.status);
-    console.error('Mensaje:', error.response?.data?.error?.message || error.message);
-    console.error('Detalles completos:', JSON.stringify(error.response?.data, null, 2));
+    console.error('❌ Error completo:', error);
     
-    // Mensaje de error más descriptivo para el usuario
-    if (error.response?.status === 400) {
-      return 'Error: La API Key de Gemini no es válida. Por favor contacta al administrador.';
-    } else if (error.response?.status === 429) {
-      return 'Error: Se alcanzó el límite de solicitudes. Por favor intenta más tarde.';
+    if (error.code === 'ECONNABORTED') {
+      console.error('❌ Timeout: La petición tardó demasiado');
+    } else if (error.response) {
+      console.error('❌ Error de API:', error.response.status);
+      console.error('❌ Mensaje:', error.response.data);
+    } else if (error.request) {
+      console.error('❌ No se recibió respuesta del servidor');
     } else {
-      return 'Error al obtener resultados. Por favor intenta nuevamente más tarde.';
+      console.error('❌ Error:', error.message);
     }
+    
+    return null;
   }
+}
+
+// Función principal de búsqueda
+async function buscarPuntosDeEntrega(ciudad) {
+  console.log(`\n🔎 Nueva búsqueda: ${ciudad}`);
+  
+  // 1. Buscar en base de datos local
+  const resultadoLocal = buscarEnBaseDatos(ciudad);
+  
+  if (resultadoLocal) {
+    let respuesta = `📍 Puntos de entrega en ${resultadoLocal.zona}\n\n`;
+    
+    resultadoLocal.puntos.forEach((punto, i) => {
+      respuesta += `${i + 1}. ${punto.nombre}\n`;
+      respuesta += `   📍 ${punto.direccion}\n`;
+      if (punto.detalles) respuesta += `   ℹ️  ${punto.detalles}\n`;
+      if (punto.telefono) respuesta += `   📞 ${punto.telefono}\n`;
+      respuesta += `\n`;
+    });
+    
+    respuesta += `💡 Tip: Siempre contacta antes de ir para confirmar horarios.\n\n`;
+    respuesta += `♻️ Recuerda: Plásticos limpios, secos y bien compactados.`;
+    
+    return respuesta;
+  }
+  
+  // 2. Consultar Gemini
+  console.log('🤖 No encontrado en BD local, consultando Gemini...');
+  const respuestaGemini = await consultarGemini(ciudad);
+  
+  if (respuestaGemini && respuestaGemini.trim().length > 50) {
+    return respuestaGemini;
+  }
+  
+  // 3. Respuesta por defecto
+  console.warn('⚠️ Usando respuesta por defecto');
+  return `Lo siento, no encontré información específica para ${ciudad}.
+
+📞 Te recomiendo:
+
+1. **Contactar la municipalidad**: Pregunta por la Secretaría de Medio Ambiente o Puntos Verdes
+
+2. **Buscar en Google Maps**: "punto verde ${ciudad}" o "reciclaje ${ciudad}"
+
+3. **Redes sociales**: Busca grupos locales de reciclaje o medio ambiente
+
+4. **Centros comunitarios**: Muchas escuelas y clubes reciben botellas de amor
+
+🌐 Recursos útiles:
+• Municipalidad local (sitio web oficial)
+• Botellas de Amor Argentina (redes sociales)
+• Grupos de vecinos en Facebook
+
+♻️ Recuerda: Los plásticos deben estar limpios, secos y bien compactados.`;
 }
 
 // HTML del formulario
@@ -209,9 +350,13 @@ const htmlFormulario = `<!DOCTYPE html>
             transition: all 0.3s;
             box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
         }
-        button:hover {
+        button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(46, 204, 113, 0.4);
+        }
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
         .ejemplo {
             margin-top: 25px;
@@ -240,39 +385,39 @@ const htmlFormulario = `<!DOCTYPE html>
         <div class="logo">♻️</div>
         <h1>EcoLocalizador Sharyco</h1>
         <p class="descripcion">
-            Encuentra los puntos de entrega más cercanos para tus <strong>Botellas de Amor</strong> y <strong>Ecoladrillos</strong>
+            Encuentra puntos de entrega para <strong>Botellas de Amor</strong> y <strong>Ecoladrillos</strong>
         </p>
         <form method="POST" id="busquedaForm">
             <label for="ciudad">📍 ¿Dónde te encuentras?</label>
             <div class="input-group">
                 <span class="input-icon">🌎</span>
-                <input type="text" id="ciudad" name="ciudad" placeholder="Ej: Buenos Aires, Argentina" required autofocus autocomplete="off">
+                <input type="text" id="ciudad" name="ciudad" placeholder="Ej: Benavidez, Tigre, Buenos Aires" required autofocus autocomplete="off">
             </div>
-            <button type="submit">🔍 Buscar Puntos de Entrega</button>
+            <button type="submit" id="btnBuscar">🔍 Buscar Puntos de Entrega</button>
         </form>
         <div class="ejemplo">
-            <strong>💡 Consejos para mejores resultados:</strong>
-            • Incluye tu ciudad y país<br>
-            • Sé específico si vives en una ciudad grande<br>
-            • Usa el nombre oficial de tu localidad
+            <strong>💡 Puedes buscar por:</strong>
+            • Barrio: "Benavidez", "Palermo"<br>
+            • Municipio: "Tigre", "San Isidro"<br>
+            • Ciudad: "Buenos Aires", "Córdoba"
         </div>
     </div>
     <script>
         document.getElementById('busquedaForm').addEventListener('submit', function(e) {
-            const btn = this.querySelector('button');
-            btn.innerHTML = '⏳ Buscando...';
+            const btn = document.getElementById('btnBuscar');
+            btn.innerHTML = '⏳ Buscando... (esto puede tardar 10-15 segundos)';
             btn.disabled = true;
         });
     </script>
 </body>
 </html>`;
 
-// Ruta GET: Mostrar formulario
+// Ruta GET
 app.get('/', (req, res) => {
   res.send(htmlFormulario);
 });
 
-// Ruta POST: Procesar búsqueda
+// Ruta POST
 app.post('/', async (req, res) => {
   const ciudad = req.body.ciudad;
   
@@ -280,8 +425,7 @@ app.post('/', async (req, res) => {
     return res.send(htmlFormulario);
   }
 
-  console.log(`🔍 Búsqueda para: ${ciudad}`);
-  const respuestaGemini = await consultarGemini(ciudad);
+  const respuesta = await buscarPuntosDeEntrega(ciudad);
 
   const htmlResultado = `<!DOCTYPE html>
 <html lang="es">
@@ -330,11 +474,12 @@ app.post('/', async (req, res) => {
             background: #f9fafb;
             padding: 30px;
             border-radius: 15px;
-            line-height: 1.9;
+            line-height: 2;
             white-space: pre-wrap;
             border: 2px solid #e8f5e9;
             font-size: 15px;
             color: #2c3e50;
+            min-height: 150px;
         }
         .info-box {
             background: #fff3cd;
@@ -381,9 +526,9 @@ app.post('/', async (req, res) => {
         <div class="ciudad">
             <strong>📍 Ciudad consultada:</strong> ${ciudad}
         </div>
-        <div class="resultado">${respuestaGemini}</div>
+        <div class="resultado">${respuesta}</div>
         <div class="info-box">
-            <strong>💡 Recuerda:</strong> Antes de entregar tus botellas de amor, verifica que los plásticos estén limpios, secos y bien compactados. ¡Cada botella cuenta para el planeta!
+            <strong>💡 ¿Conoces un punto que no aparece aquí?</strong> Repórtalo a Sharyco para agregarlo a la base de datos y ayudar a más personas.
         </div>
         <div class="footer">
             <p style="color: #7f8c8d; margin-bottom: 15px;">¿Necesitas buscar en otra ubicación?</p>
@@ -399,9 +544,9 @@ app.post('/', async (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   res.json({ 
-    status: 'OK', 
-    message: 'EcoLocalizador funcionando correctamente',
-    hasApiKey: GEMINI_API_KEY !== 'TU_API_KEY_DE_GEMINI_AQUI'
+    status: 'OK',
+    hasApiKey: !!GEMINI_API_KEY,
+    puntosEnBD: puntosLocales.length
   });
 });
 
@@ -409,15 +554,12 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log('');
   console.log('✅ ================================================');
-  console.log('✅  Servidor EcoLocalizador ACTIVO               ');
+  console.log('✅  Servidor EcoLocalizador ACTIVO');
   console.log('✅ ================================================');
   console.log('');
   console.log(`🌍 Puerto: ${PORT}`);
-  console.log(`🔑 API Key configurada: ${GEMINI_API_KEY !== 'TU_API_KEY_DE_GEMINI_AQUI' ? 'SÍ ✅' : 'NO ❌'}`);
-  console.log('');
-  if (GEMINI_API_KEY === 'TU_API_KEY_DE_GEMINI_AQUI') {
-    console.log('⚠️  ADVERTENCIA: Configura GEMINI_API_KEY como variable de entorno');
-  }
+  console.log(`🔑 API Key: ${GEMINI_API_KEY ? 'Configurada ✅' : 'NO configurada ❌'}`);
+  console.log(`📍 Puntos en BD: ${puntosLocales.length}`);
   console.log('');
 });
 
@@ -426,6 +568,6 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Error no capturado:', error);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Promesa rechazada no manejada:', reason);
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Promesa rechazada:', reason);
 });
